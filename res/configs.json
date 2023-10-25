@@ -1,0 +1,16 @@
+
+{"cfgs": [
+	{
+		"alias": "星穹铁道简易辅助",
+		"cmd": "1", 
+		"res_path": "star_rail",
+		"find_clicks": [
+			"test.png", ""
+		]
+	},
+	{
+		"cmd": "test",
+		"res_path": "test"
+	}
+]}
+
