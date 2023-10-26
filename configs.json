@@ -1,0 +1,26 @@
+
+{"cfgs": [
+	{
+		"alias": "星穹铁道简易辅助",
+		"cmd": "1", 
+		"res_path": "star_rail/",
+		"window_name": "星穹铁道",
+		"foreground": true,
+		"matches": [
+			"有体力再来一次.png", "挑战.png", "开始挑战.png",
+			"每日奖励.png", "点击进入.png"
+		]
+	},
+	{
+		"alias": "晶核辅助",
+		"cmd": "2", 
+		"res_path": "coa/",
+		"window_name": "晶核",
+		"foreground": true,
+		"matches": [
+			"再来一次.png", "继续.png", "确认.png",
+			"准备.png"
+		]
+	}
+]}
+
