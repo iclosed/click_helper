@@ -2,18 +2,21 @@
 {"cfgs": [
 	{
 		"alias": "星穹铁道简易辅助",
-		"cmd": "1", 
+		"cmd": "1",
 		"res_path": "star_rail/",
 		"window_name": "星穹铁道",
 		"foreground": true,
 		"matches": [
-			"有体力再来一次.png", "挑战.png", "开始挑战.png",
-			"每日奖励.png", "点击进入.png"
+			"有体力再来一次.png", "挑战.png", "开始挑战.png", "每日任务活跃领取.png",
+			"每日奖励.png", "点击进入.png", "丰饶.png", "丰饶2.png", "祝福确认.png",
+			"模拟宇宙事件文本继续.png", "模拟宇宙事件选择.png", "模拟宇宙事件选择2.png",
+			"点击空白处关闭.png", "点击空白处关闭1.png", "点击空白处关闭2.png", "点击空白处关闭3.png",
+			"委托待领取.png", "领取委托.png", "委托tab1待领.png", "委托tab2待领.png", "再次派遣委托.png"
 		]
 	},
 	{
 		"alias": "晶核辅助",
-		"cmd": "2", 
+		"cmd": "jh",
 		"res_path": "coa/",
 		"window_name": "晶核",
 		"foreground": true,
@@ -23,4 +26,5 @@
 		]
 	}
 ]}
+
 
