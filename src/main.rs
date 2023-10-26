@@ -123,7 +123,7 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: Config) {
 			let img_height = img.height();
 			matcher.match_template(&input_image, img, MatchTemplateMethod::SumOfSquaredDifferences);
 			let extremes = find_extremes(&matcher.wait_for_result().unwrap());
-			if extremes.min_value < 3.0 {
+			if extremes.min_value < 2.0 {
 				println!("template_image({}) Found! with diff({})", img_title, extremes.min_value);
 				let real_x = extremes.min_value_location.0 + img_width / 2;
 				let real_y = extremes.min_value_location.1 + img_height / 2;
@@ -132,8 +132,8 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: Config) {
 				} else {
 					send_click_event_to_window(window.hwnd, real_x as isize, real_y as isize);
 				}
-			} else if extremes.min_value < 20.0 {
-				println!("template_image({}) nearly found... with diff({})", img_title, extremes.min_value);
+			} else if extremes.min_value < 5.0 {
+				// println!("template_image({}) nearly found... with diff({})", img_title, extremes.min_value);
 			}
 		}
 		thread::sleep(Duration::from_millis(100));
@@ -184,8 +184,8 @@ fn print_help(data: &ConfigData) {
 	for cfg in &data.cfgs {
 		println!("{}: 运行{}", cfg.cmd, cfg.alias);
 	}
-	println!("t | test: 运行测试代码");
-	println!("q | quit | exit: 退出程序");
+	println!("t, test: 运行测试代码");
+	println!("q, quit, exit: 退出程序");
 	println!("--------------------------------");
 	println!();
 }
@@ -212,5 +212,6 @@ fn rgba_to_luma_f32(image: &ImageBuffer<Rgba<u8>, Vec<u8>>) -> ImageBuffer<Luma<
 	}
 	result
 }
+
 
 
