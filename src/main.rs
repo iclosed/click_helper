@@ -11,6 +11,9 @@ use win_screenshot::prelude::*;
 use windows::{Win32::Foundation::*, Win32::UI::WindowsAndMessaging::*};
 use serde_derive::Deserialize;
 
+use winput::{Vk, Action};
+use winput::message_loop;
+
 #[derive(Deserialize)]
 struct ConfigData {
 	cfgs: Vec<Config>
@@ -32,7 +35,11 @@ fn main() {
 	let reader = std::io::BufReader::new(file);
 	let data: ConfigData = serde_json::from_reader(reader).expect("配置文件json解析错误!\n");
 	print_help(&data);
-	let match_loop = Arc::new(AtomicBool::new(false));
+	let loop_flag = Arc::new(AtomicBool::new(false));
+	let loop_flag_clone = Arc::clone(&loop_flag);
+	let input_listen_thread = thread::spawn(move || {
+		input_listen(loop_flag_clone);
+	});
 	loop {
 		print!("Enter command: ");
 		std::io::stdout().flush().expect("Flush ERROR");
@@ -50,49 +57,82 @@ fn main() {
 			continue;
 		}
 		if let "t" | "test" = cmd {
-			test();
+			loop_flag.store(true, Ordering::SeqCst);
+			let test_loop_c = Arc::clone(&loop_flag);
+			let t = thread::spawn(move || {
+				test(test_loop_c);
+			});
+			t.join().unwrap();
 			continue;
 		}
 		if let Some(cfg) = data.cfgs.iter().find(|c| c.cmd == cmd) {
 			println!("Config({}) Loaded!", &cfg.alias);
-			match_loop.store(true, Ordering::SeqCst);
-			let match_loop_c = Arc::clone(&match_loop);
+			loop_flag.store(true, Ordering::SeqCst);
+			let match_loop = Arc::clone(&loop_flag);
 			let config = cfg.clone();
 			let t = thread::spawn(move || {
-				match_clicks(match_loop_c, config);
+				match_clicks(match_loop, config);
 			});
-			wait_for_esc(&match_loop);  // 等待按下Esc键
 			t.join().unwrap();
 			continue;
 		}
 		println!("未知指令. (输入 help 或 h 获取帮助)");
 	}
+	message_loop::stop();
+	input_listen_thread.join().unwrap();
 }
 
-fn wait_for_esc(loop_flag: &Arc<AtomicBool>) {
-	crossterm::terminal::enable_raw_mode().unwrap(); // 启用原始模式
+fn input_listen(loop_flag: Arc<AtomicBool>) {
+	let receiver = message_loop::start().unwrap();
 	loop {
-		if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
-			if key_event.code == crossterm::event::KeyCode::Esc {
-				loop_flag.store(false, Ordering::SeqCst);
-				break;
-			}
+		if !message_loop::is_active() {
+			break;
+		}
+		match receiver.next_event() {
+			message_loop::Event::Keyboard {vk, action: Action::Press, ..} => {
+				if vk == Vk::Escape {
+					loop_flag.store(false, Ordering::SeqCst);
+				} else {
+					// println!("{:?} was pressed!", vk);
+				}
+			},
+			_ => (),
 		}
 	}
-	crossterm::terminal::disable_raw_mode().unwrap(); // 禁用原始模式
 }
 
-fn test() {
-	let title = "星穹铁道";
-	// let title = "yysls";
-	let win_list = window_list().unwrap();
-	// let window = win_list.iter().find(|i| i.window_name.contains(title)).unwrap();
-	if let Some(window) = win_list.iter().find(|i| i.window_name.contains(title)) {
-		foreground_window_and_click(window.hwnd, 100, 100);
-		println!("window found {}, and click at (100, 100)", window.window_name);
-	} else {
-		println!("window not found");
+fn test(looping: Arc<AtomicBool>) {
+	let mut dots = 1;
+	let mut print_dots = print_dots_func();
+	loop {
+		if !looping.load(Ordering::SeqCst) {
+			print!("\r\x1B[2K");
+			break;
+		}
+		print_dots();
+		thread::sleep(Duration::from_millis(500));
 	}
+}
+
+fn print_dots_func() -> impl FnMut() -> u32 {
+	let mut counter = 0;
+	let mut closure = move || {
+		counter += 1;
+		if counter > 3 {
+			counter = 0;
+		}
+		for _ in 0..99 {
+			print!("\x08");
+		}
+		// print!("\r\x1B[2K");
+		print!("Procesing");
+		for _ in 0..counter {
+			print!(".")
+		}
+		std::io::stdout().flush().expect("Flush ERROR");
+		counter
+	};
+	closure
 }
 
 fn match_clicks(looping: Arc<AtomicBool>, cfg: Config) {
@@ -109,12 +149,14 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: Config) {
 		}
 	}
 	// 2. Start Matching & Clicking:
-	println!("Start Matching & Clicking...");
 	let mut matcher = TemplateMatcher::new();
+	let mut print_dots = print_dots_func();
 	loop {
 		if !looping.load(Ordering::SeqCst) {
+			print!("\r\x1B[2K");
 			break;
 		}
+		print_dots();
 		let buf = capture_window_ex(window.hwnd, Using::PrintWindow, Area::ClientOnly, None, None).unwrap();
 		let img_rgb = RgbaImage::from_raw(buf.width, buf.height, buf.pixels).unwrap();
 		let input_image = rgba_to_luma_f32(&img_rgb);
@@ -124,6 +166,7 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: Config) {
 			matcher.match_template(&input_image, img, MatchTemplateMethod::SumOfSquaredDifferences);
 			let extremes = find_extremes(&matcher.wait_for_result().unwrap());
 			if extremes.min_value < 2.0 {
+				print!("\r\x1B[2K");
 				println!("template_image({}) Found! with diff({})", img_title, extremes.min_value);
 				let real_x = extremes.min_value_location.0 + img_width / 2;
 				let real_y = extremes.min_value_location.1 + img_height / 2;
@@ -212,6 +255,7 @@ fn rgba_to_luma_f32(image: &ImageBuffer<Rgba<u8>, Vec<u8>>) -> ImageBuffer<Luma<
 	}
 	result
 }
+
 
 
 
