@@ -1,8 +1,6 @@
 use std::thread;
 use std::fs::File;
 use std::io::Write;
-use std::io::BufRead;
-use std::io::Read;
 use std::time::Duration;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -65,6 +63,7 @@ fn main() {
 			let t = thread::spawn(move || {
 				test(test_loop_c);
 			});
+			disable_input_when_looping(&loop_flag);
 			t.join().unwrap();
 			continue;
 		}
@@ -112,20 +111,16 @@ fn input_listen(loop_flag: Arc<AtomicBool>) {
 }
 
 fn test(looping: Arc<AtomicBool>) {
-	let mut cnt = 0;
 	let mut print_dots = looping_print_func();
 	loop {
 		if !looping.load(Ordering::SeqCst) {
 			break;
 		}
 		print_dots();
-		cnt += 1;
-		if cnt > 8 {
-			break;
-		}
 		thread::sleep(Duration::from_millis(500));
 	}
 	clear_line();
+	println!("Test looping finished!");
 }
 
 fn looping_print_func() -> impl FnMut() -> u32 {
@@ -133,10 +128,11 @@ fn looping_print_func() -> impl FnMut() -> u32 {
 	let mut counter = 0;
 	let closure = move || {
 		clear_line();
-		print!("Procesing(Shift+Q to stop)");
+		print!("Procesing");
 		for _ in 0..counter {
 			print!(".");
 		}
+		print!(" (Shift+Q to stop)");
 		std::io::stdout().flush().unwrap();
 		counter += 1;
 		if counter > len {
@@ -160,23 +156,17 @@ fn clear_line() {
 	}
 }
 
-fn wait_for_esc(looping: &Arc<AtomicBool>) {
+fn disable_input_when_looping(looping: &Arc<AtomicBool>) {
 	crossterm::terminal::enable_raw_mode().unwrap(); // 启用原始模式
-	let receiver = message_loop::start().unwrap();
 	loop {
-		if !message_loop::is_active() {
+		if !looping.load(Ordering::SeqCst) {
 			break;
 		}
-		match receiver.next_event() {
-			message_loop::Event::Keyboard {vk, action: Action::Press, ..} => {
-				if vk == Vk::Escape {
-					looping.store(false, Ordering::SeqCst);
-					break;
-				} else {
-					// println!("{:?} was pressed!", vk);
-				}
-			},
-			_ => (),
+		if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
+			if key_event.code == crossterm::event::KeyCode::Esc {
+				looping.store(false, Ordering::SeqCst);
+				break;
+			}
 		}
 	}
 	crossterm::terminal::disable_raw_mode().unwrap(); // 禁用原始模式
@@ -275,7 +265,6 @@ fn print_help(data: &ConfigData) {
 	for cfg in &data.cfgs {
 		println!("{}: 运行{}", cfg.cmd, cfg.alias);
 	}
-	println!("Shift + Q: 停止运行");
 	println!("t, test: 运行测试代码");
 	println!("q, quit, exit: 退出程序");
 	println!("--------------------------------");
@@ -304,5 +293,6 @@ fn rgba_to_luma_f32(image: &ImageBuffer<Rgba<u8>, Vec<u8>>) -> ImageBuffer<Luma<
 	}
 	result
 }
+
 
 
