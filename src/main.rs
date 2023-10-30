@@ -5,7 +5,6 @@ use std::time::Duration;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use chrono::Local;
 use template_matching::{find_extremes, MatchTemplateMethod, TemplateMatcher};
 use image::{ImageBuffer, RgbaImage, Rgba, Luma};
 use win_screenshot::prelude::*;
@@ -15,6 +14,9 @@ use serde_derive::Deserialize;
 use winput::{Vk, Action};
 use winput::message_loop;
 
+const WINPAD_X: i32 = 16;
+const WINPAD_Y: i32 = 39;
+
 #[derive(Deserialize)]
 struct ConfigData {
 	cfgs: Vec<Config>
@@ -22,12 +24,13 @@ struct ConfigData {
 
 #[derive(Deserialize, Clone)]
 struct Config {
-	cmd: String,  // 控制台指令 (必须定义)
-	res_path: String,  // 资源目录 (必须定义)
-	window_name: String,  // 目标窗口名称子集
+	cmd: String,  // 控制台指令
+	window_name: String,  // 窗口名称(子集即可)
+	client_width: i32,
+	client_height: i32,
 	#[serde(default)] foreground: bool,  // 点击是否需要置顶窗口
 	#[serde(default)] alias: String,  // 别名
-	#[serde(default)] matches: Vec<String>,  // 查找并点击的模板
+	#[serde(default)] match_pic_path: String,  // 查找并点击的模板
 }
 
 fn main() {
@@ -57,6 +60,10 @@ fn main() {
 			print_help(&data);
 			continue;
 		}
+		if let "f" = cmd {
+			test_once();
+			continue;
+		}
 		if let "t" | "test" = cmd {
 			loop_flag.store(true, Ordering::SeqCst);
 			let test_loop_c = Arc::clone(&loop_flag);
@@ -68,13 +75,14 @@ fn main() {
 			continue;
 		}
 		if let Some(cfg) = data.cfgs.iter().find(|c| c.cmd == cmd) {
-			println!("Config({}) Loaded!", &cfg.alias);
+			println!("({}) Loaded!", &cfg.alias);
 			loop_flag.store(true, Ordering::SeqCst);
 			let match_loop = Arc::clone(&loop_flag);
 			let config = cfg.clone();
 			let t = thread::spawn(move || {
 				match_clicks(match_loop, config);
 			});
+			disable_input_when_looping(&loop_flag);
 			t.join().unwrap();
 			continue;
 		}
@@ -110,6 +118,25 @@ fn input_listen(loop_flag: Arc<AtomicBool>) {
 	}
 }
 
+fn test_once() {
+	let entries = std::fs::read_dir("res/star_rail/").expect("Failed to read directory");
+
+	// 迭代处理每个文件
+	for entry in entries {
+		if let Ok(entry) = entry {
+			let path = entry.path();
+			if !path.is_file() {
+				continue;
+			}
+			let file_name = path.file_stem().unwrap().to_str().unwrap();
+			let ext = path.extension().unwrap().to_str().unwrap();
+			println!("File name: {}", file_name);
+			println!("Extension: {}", ext);
+			println!("---");
+		}
+	}
+}
+
 fn test(looping: Arc<AtomicBool>) {
 	let mut print_dots = looping_print_func();
 	loop {
@@ -117,14 +144,14 @@ fn test(looping: Arc<AtomicBool>) {
 			break;
 		}
 		print_dots();
-		thread::sleep(Duration::from_millis(500));
+		thread::sleep(Duration::from_millis(100));
 	}
 	clear_line();
 	println!("Test looping finished!");
 }
 
 fn looping_print_func() -> impl FnMut() -> u32 {
-	let len = 3;
+	let len = 5;
 	let mut counter = 0;
 	let closure = move || {
 		clear_line();
@@ -176,24 +203,41 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: Config) {
 	let win_list = window_list().unwrap();
 	let window = win_list.iter().find(|i| i.window_name.contains(&cfg.window_name)).unwrap();
 	// 1. Loading template images:
-	println!("{} Loading template images...", Local::now());
+	let templates_path = format!("res/{}/", &cfg.match_pic_path);
+	println!("{} -- Loading template images from \"{}\" ....", now_str(), &templates_path);
+	let entries = std::fs::read_dir(templates_path).unwrap();
 	let mut img_dict: HashMap<String, ImageBuffer<Luma<f32>, Vec<f32>>> = HashMap::new();
-	for img_title in &cfg.matches {
-		if let Ok(img) = image::open(format!("res/{}{}", &cfg.res_path, img_title)) {
-			img_dict.insert(img_title.to_string(), img.to_luma32f());
-		} else {
-			continue;
+	for entry in entries {
+		if let Ok(entry) = entry {
+			let path = entry.path();
+			if !path.is_file() {
+				continue;
+			}
+			if let Some(ext) = path.extension() {
+				if ext != "png" && ext != "jpg" && ext != "jpeg" {
+					continue;
+				}
+				if let Ok(img) = image::open(&path) {
+					let fname = path.file_stem().unwrap().to_string_lossy().into_owned();
+					print!("({}), ", &fname);
+					std::io::stdout().flush().unwrap();
+					img_dict.insert(fname, img.to_luma32f());
+				}
+			}
 		}
 	}
+	println!("\n{} -- Template images all loaded.", now_str());
 	// 2. Start Matching & Clicking:
+	set_window_rect(window.hwnd, cfg.client_width + WINPAD_X, cfg.client_height + WINPAD_Y);
 	let mut matcher = TemplateMatcher::new();
 	let mut print_dots = looping_print_func();
 	loop {
+		print_dots();
 		if !looping.load(Ordering::SeqCst) {
-			print!("\r\x1B[2K");
+			clear_line();
+			println!("({}) Finished!", &cfg.alias);
 			break;
 		}
-		print_dots();
 		let buf = capture_window_ex(window.hwnd, Using::PrintWindow, Area::ClientOnly, None, None).unwrap();
 		let img_rgb = RgbaImage::from_raw(buf.width, buf.height, buf.pixels).unwrap();
 		let input_image = rgba_to_luma_f32(&img_rgb);
@@ -202,9 +246,9 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: Config) {
 			let img_height = img.height();
 			matcher.match_template(&input_image, img, MatchTemplateMethod::SumOfSquaredDifferences);
 			let extremes = find_extremes(&matcher.wait_for_result().unwrap());
-			if extremes.min_value < 2.0 {
-				print!("\r\x1B[2K");
-				println!("template_image({}) Found! with diff({})", img_title, extremes.min_value);
+			if extremes.min_value < 3.0 {
+				clear_line();
+				println!("{} -- ({}) Found! with diff({})", now_str(), img_title, extremes.min_value);
 				let real_x = extremes.min_value_location.0 + img_width / 2;
 				let real_y = extremes.min_value_location.1 + img_height / 2;
 				if cfg.foreground {
@@ -212,11 +256,12 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: Config) {
 				} else {
 					send_click_event_to_window(window.hwnd, real_x as isize, real_y as isize);
 				}
-			} else if extremes.min_value < 5.0 {
-				// println!("template_image({}) nearly found... with diff({})", img_title, extremes.min_value);
+			} else if extremes.min_value < 8.0 {
+				clear_line();
+				println!("{} -- ({}) Nearly found. diff({})", now_str(), img_title, extremes.min_value);
 			}
 		}
-		thread::sleep(Duration::from_millis(100));
+		thread::sleep(Duration::from_millis(50));
 	}
 }
 
@@ -225,7 +270,7 @@ fn send_click_event_to_window(hwnd: isize, x: isize, y: isize) {
 		0.(optional) use spy++ to capture target window's mouse events.
 		1. SendMessage or PostMessage to simulate the mouse.
 	*/
-	println!("send click event ({}, {}) to window({})", x, y, hwnd);
+	println!("{} -- send click event ({}, {}) to window({})", now_str(), x, y, hwnd);
 	let lpos = LPARAM(x | (y << 16));
 	unsafe {
 		SendMessageW(HWND(hwnd), WM_SETCURSOR, WPARAM(hwnd as usize), LPARAM(1 | ((WM_MOUSEMOVE as isize)<<16)));
@@ -243,7 +288,7 @@ fn foreground_window_and_click(hwnd: isize, x: i32, y: i32) {
 		1. Set target window foreground.
 		2. Simulate basic mouse movement and click action.
 	*/
-	println!("foreground window({}) and click ({}, {})", hwnd, x, y);
+	println!("{} -- foreground the window and click ({}, {})", now_str(), x, y);
 	let mut info = WINDOWINFO {
 		cbSize: core::mem::size_of::<WINDOWINFO>() as u32,
 		..Default::default()
@@ -257,18 +302,6 @@ fn foreground_window_and_click(hwnd: isize, x: i32, y: i32) {
 	winput::Mouse::set_position(info.rcClient.left + x, info.rcClient.top + y).unwrap();
 	winput::send(winput::Button::Left);
 	// winput::Mouse::move_relative(1, 0);
-}
-
-fn print_help(data: &ConfigData) {
-	println!();
-	println!("------------可用指令-------------");
-	for cfg in &data.cfgs {
-		println!("{}: 运行{}", cfg.cmd, cfg.alias);
-	}
-	println!("t, test: 运行测试代码");
-	println!("q, quit, exit: 退出程序");
-	println!("--------------------------------");
-	println!();
 }
 
 fn rgba_to_luma_f32_pixel(rgba_pixel: &Rgba<u8>) -> Luma<f32> {
@@ -293,6 +326,47 @@ fn rgba_to_luma_f32(image: &ImageBuffer<Rgba<u8>, Vec<u8>>) -> ImageBuffer<Luma<
 	}
 	result
 }
+
+fn _get_window_rect(hwnd: isize) {
+	let mut info = WINDOWINFO {
+		cbSize: core::mem::size_of::<WINDOWINFO>() as u32,
+		..Default::default()
+	};
+	unsafe { GetWindowInfo(HWND(hwnd), &mut info).unwrap(); }
+	println!("Client width: {}, height: {}",
+		info.rcWindow.right - info.rcWindow.left,
+		info.rcWindow.bottom - info.rcWindow.top
+	);
+}
+
+fn set_window_rect(hwnd: isize, width: i32, height: i32) {
+	unsafe {
+		SetWindowPos(
+			HWND(hwnd), HWND_TOP, 0, 0, width, height,
+			SWP_DRAWFRAME | SWP_NOMOVE | SWP_NOZORDER
+		).unwrap();
+	}
+}
+
+fn now_str() -> String {
+	let local_time = chrono::Local::now();
+	let format_items = chrono::format::strftime::StrftimeItems::new("%Y-%m-%d %H:%M:%S");
+	let formatted_time = local_time.format_with_items(format_items).to_string();
+	formatted_time
+}
+
+fn print_help(data: &ConfigData) {
+	println!();
+	println!("------------可用指令-------------");
+	for cfg in &data.cfgs {
+		println!("{}: 运行{}", cfg.cmd, cfg.alias);
+	}
+	println!("t, test: 运行测试代码");
+	println!("q, quit, exit: 退出程序");
+	println!("--------------------------------");
+	println!();
+}
+
 
 
 
