@@ -1,10 +1,13 @@
 use std::thread;
 use std::fs::File;
 use std::io::Write;
+use std::io::BufRead;
+use std::io::Read;
 use std::time::Duration;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use chrono::Local;
 use template_matching::{find_extremes, MatchTemplateMethod, TemplateMatcher};
 use image::{ImageBuffer, RgbaImage, Rgba, Luma};
 use win_screenshot::prelude::*;
@@ -42,9 +45,9 @@ fn main() {
 	});
 	loop {
 		print!("Enter command: ");
-		std::io::stdout().flush().expect("Flush ERROR");
+		std::io::stdout().flush().unwrap();
 		let mut input = String::new();
-		std::io::stdin().read_line(&mut input).expect("System input ERROR");
+		std::io::stdin().read_line(&mut input).unwrap();
 		let cmd = input.trim();
 		if let "q" | "quit" | "exit" = cmd {
 			break;
@@ -84,16 +87,23 @@ fn main() {
 
 fn input_listen(loop_flag: Arc<AtomicBool>) {
 	let receiver = message_loop::start().unwrap();
+	let mut shift_holder = false;
 	loop {
 		if !message_loop::is_active() {
 			break;
 		}
 		match receiver.next_event() {
 			message_loop::Event::Keyboard {vk, action: Action::Press, ..} => {
-				if vk == Vk::Escape {
+				if vk == Vk::Shift {
+					shift_holder = true;
+				}
+				if vk == Vk::Q && shift_holder {
 					loop_flag.store(false, Ordering::SeqCst);
-				} else {
-					// println!("{:?} was pressed!", vk);
+				}
+			},
+			message_loop::Event::Keyboard {vk, action: Action::Release, ..} => {
+				if vk == Vk::Shift {
+					shift_holder = false;
 				}
 			},
 			_ => (),
@@ -102,44 +112,81 @@ fn input_listen(loop_flag: Arc<AtomicBool>) {
 }
 
 fn test(looping: Arc<AtomicBool>) {
-	let mut dots = 1;
-	let mut print_dots = print_dots_func();
+	let mut cnt = 0;
+	let mut print_dots = looping_print_func();
 	loop {
 		if !looping.load(Ordering::SeqCst) {
-			print!("\r\x1B[2K");
 			break;
 		}
 		print_dots();
+		cnt += 1;
+		if cnt > 8 {
+			break;
+		}
 		thread::sleep(Duration::from_millis(500));
 	}
+	clear_line();
 }
 
-fn print_dots_func() -> impl FnMut() -> u32 {
+fn looping_print_func() -> impl FnMut() -> u32 {
+	let len = 3;
 	let mut counter = 0;
-	let mut closure = move || {
+	let closure = move || {
+		clear_line();
+		print!("Procesing(Shift+Q to stop)");
+		for _ in 0..counter {
+			print!(".");
+		}
+		std::io::stdout().flush().unwrap();
 		counter += 1;
-		if counter > 3 {
+		if counter > len {
 			counter = 0;
 		}
-		for _ in 0..99 {
-			print!("\x08");
-		}
-		// print!("\r\x1B[2K");
-		print!("Procesing");
-		for _ in 0..counter {
-			print!(".")
-		}
-		std::io::stdout().flush().expect("Flush ERROR");
 		counter
 	};
 	closure
+}
+
+fn clear_line() {
+	let col = 120;
+	for _ in 0..col {
+		print!("\x08");
+	}
+	for _ in 0..col {
+		print!("\x20");
+	}
+	for _ in 0..col {
+		print!("\x08");
+	}
+}
+
+fn wait_for_esc(looping: &Arc<AtomicBool>) {
+	crossterm::terminal::enable_raw_mode().unwrap(); // 启用原始模式
+	let receiver = message_loop::start().unwrap();
+	loop {
+		if !message_loop::is_active() {
+			break;
+		}
+		match receiver.next_event() {
+			message_loop::Event::Keyboard {vk, action: Action::Press, ..} => {
+				if vk == Vk::Escape {
+					looping.store(false, Ordering::SeqCst);
+					break;
+				} else {
+					// println!("{:?} was pressed!", vk);
+				}
+			},
+			_ => (),
+		}
+	}
+	crossterm::terminal::disable_raw_mode().unwrap(); // 禁用原始模式
 }
 
 fn match_clicks(looping: Arc<AtomicBool>, cfg: Config) {
 	let win_list = window_list().unwrap();
 	let window = win_list.iter().find(|i| i.window_name.contains(&cfg.window_name)).unwrap();
 	// 1. Loading template images:
-	println!("Loading template images...");
+	println!("{} Loading template images...", Local::now());
 	let mut img_dict: HashMap<String, ImageBuffer<Luma<f32>, Vec<f32>>> = HashMap::new();
 	for img_title in &cfg.matches {
 		if let Ok(img) = image::open(format!("res/{}{}", &cfg.res_path, img_title)) {
@@ -150,7 +197,7 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: Config) {
 	}
 	// 2. Start Matching & Clicking:
 	let mut matcher = TemplateMatcher::new();
-	let mut print_dots = print_dots_func();
+	let mut print_dots = looping_print_func();
 	loop {
 		if !looping.load(Ordering::SeqCst) {
 			print!("\r\x1B[2K");
@@ -223,10 +270,12 @@ fn foreground_window_and_click(hwnd: isize, x: i32, y: i32) {
 }
 
 fn print_help(data: &ConfigData) {
+	println!();
 	println!("------------可用指令-------------");
 	for cfg in &data.cfgs {
 		println!("{}: 运行{}", cfg.cmd, cfg.alias);
 	}
+	println!("Shift + Q: 停止运行");
 	println!("t, test: 运行测试代码");
 	println!("q, quit, exit: 退出程序");
 	println!("--------------------------------");
@@ -255,7 +304,5 @@ fn rgba_to_luma_f32(image: &ImageBuffer<Rgba<u8>, Vec<u8>>) -> ImageBuffer<Luma<
 	}
 	result
 }
-
-
 
 
