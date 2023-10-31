@@ -34,6 +34,10 @@ struct Config {
 }
 
 fn main() {
+	std::panic::set_hook(Box::new(|panic_info| {
+		println!("Panic occurred:\n{:?}", panic_info);
+		let _ = std::process::Command::new("cmd").arg("/c").arg("pause").status();
+	}));
 	let cfg_path = "configs.json";
 	let file = File::open(cfg_path).expect("找不到配置文件! (configs.json)\n");
 	let reader = std::io::BufReader::new(file);
@@ -366,7 +370,5 @@ fn print_help(data: &ConfigData) {
 	println!("--------------------------------");
 	println!();
 }
-
-
 
 
