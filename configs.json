@@ -10,8 +10,8 @@
 		"match_pic_path": "star_r_1280x720"
 	},
 	{
-		"alias": "星穹铁道测试",
-		"cmd": "sr",
+		"alias": "星穹铁道测试1600x900",
+		"cmd": "sr_test",
 		"window_name": "星穹铁道",
 		"foreground": true,
 		"client_width": 1600,
