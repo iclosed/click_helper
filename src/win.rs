@@ -78,16 +78,21 @@ pub fn foreground_window_and_click(hwnd: isize, x: i32, y: i32) {
 		..Default::default()
 	};
 	unsafe {
+		let working_hwnd = GetForegroundWindow();
 		GetWindowInfo(HWND(hwnd), &mut info).unwrap();
 		SetForegroundWindow(HWND(hwnd));
-	}
-	std::thread::sleep(std::time::Duration::from_millis(10));
 
-	let real_x = info.rcClient.left + x;
-	let real_y = info.rcClient.top + y;
-	winput::Mouse::set_position(real_x, real_y).unwrap();
-	winput::send(winput::Button::Left);
-	// winput::Mouse::move_relative(1, 0);
+		std::thread::sleep(std::time::Duration::from_millis(10));
+
+		let real_x = info.rcClient.left + x;
+		let real_y = info.rcClient.top + y;
+		winput::Mouse::set_position(real_x, real_y).unwrap();
+		winput::send(winput::Button::Left);
+		// winput::Mouse::move_relative(1, 0);
+
+		std::thread::sleep(std::time::Duration::from_millis(100));
+		SetForegroundWindow(working_hwnd);
+	}
 }
 
 pub fn input_listen(loop_flag: Arc<AtomicBool>) {
@@ -131,3 +136,4 @@ pub fn disable_input_when_looping(looping: &Arc<AtomicBool>) {
 	}
 	disable_raw_mode().unwrap(); // 禁用原始模式
 }
+
