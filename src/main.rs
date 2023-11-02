@@ -43,7 +43,16 @@ fn main() {
 		if let "q" | "quit" | "exit" = cmd { break; }
 		if let "" = cmd { continue; }
 		if let "h" | "help" = cmd { utils::print_help(&data); continue; }
-		if let "f" = cmd { test_once(); continue; }
+		if let "f" = cmd {
+			loop_flag.store(true, Ordering::SeqCst);
+			let test_loop_c = Arc::clone(&loop_flag);
+			let t = thread::spawn(move || {
+				get_foreground_window_rect(test_loop_c);
+			});
+			win::disable_input_when_looping(&loop_flag);
+			t.join().unwrap();
+			continue;
+		}
 		if let "t" | "test" = cmd {
 			loop_flag.store(true, Ordering::SeqCst);
 			let test_loop_c = Arc::clone(&loop_flag);
@@ -72,8 +81,22 @@ fn main() {
 	input_listen_thread.join().unwrap();
 }
 
-fn test_once() {
-	println!("---");
+fn get_foreground_window_rect(looping: Arc<AtomicBool>) {
+	loop {
+		if !looping.load(Ordering::SeqCst) {
+			println!();
+			break;
+		}
+		unsafe {
+			let h = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
+			let (x, y) = win::get_window_resolution(h.0);
+			utils::clear_line();
+			print!("Reading Top window resolution: ({} x {}).", x, y);
+			std::io::stdout().flush().unwrap();
+		}
+		thread::sleep(std::time::Duration::from_millis(100));
+	}
+	utils::clear_line();
 }
 
 fn test(looping: Arc<AtomicBool>) {
@@ -140,5 +163,6 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: utils::Config) {
 		thread::sleep(std::time::Duration::from_millis(50));
 	}
 }
+
 
 

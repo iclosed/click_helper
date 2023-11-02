@@ -32,6 +32,7 @@ pub fn print_help(data: &ConfigData) {
 	for cfg in &data.cfgs {
 		println!("{}: 运行{}", cfg.cmd, cfg.alias);
 	}
+	println!("f: 显示选中窗口的分辨率");
 	println!("t, test: 运行测试代码");
 	println!("q, quit, exit: 退出程序");
 	println!("--------------------------------");
@@ -76,3 +77,4 @@ pub fn now_str() -> String {
 	let format_items = StrftimeItems::new("%Y-%m-%d %H:%M:%S");
 	return local_time.format_with_items(format_items).to_string();
 }
+

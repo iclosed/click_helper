@@ -10,16 +10,21 @@ use crossterm::terminal::*;
 
 
 #[allow(dead_code)]
-pub fn get_window_rect(hwnd: isize) {
+pub fn get_window_resolution(hwnd: isize) -> (i32, i32) {
 	let mut info = WINDOWINFO {
 		cbSize: core::mem::size_of::<WINDOWINFO>() as u32,
 		..Default::default()
 	};
-	unsafe { GetWindowInfo(HWND(hwnd), &mut info).unwrap(); }
-	println!("Client width: {}, height: {}",
-		info.rcWindow.right - info.rcWindow.left,
-		info.rcWindow.bottom - info.rcWindow.top
-	);
+	unsafe {
+		if let Ok(_) = GetWindowInfo(HWND(hwnd), &mut info) {
+			(
+				info.rcWindow.right - info.rcWindow.left - utils::WINPAD_X,
+				info.rcWindow.bottom - info.rcWindow.top - utils::WINPAD_Y
+			)
+		} else {
+			(-1, -1)
+		}
+	}
 }
 
 pub fn set_window_rect(hwnd: isize, width: i32, height: i32) {
@@ -136,4 +141,5 @@ pub fn disable_input_when_looping(looping: &Arc<AtomicBool>) {
 	}
 	disable_raw_mode().unwrap(); // 禁用原始模式
 }
+
 
