@@ -100,6 +100,20 @@ pub fn foreground_window_and_click(hwnd: isize, x: i32, y: i32) {
 	}
 }
 
+pub fn left_button_down(hwnd: isize) {
+	unsafe {
+		// SendMessageW(HWND(hwnd), WM_SETCURSOR, WPARAM(hwnd as usize), lmbd);
+		PostMessageW(HWND(hwnd), WM_LBUTTONDOWN, WPARAM(1), LPARAM(0)).unwrap();
+	}
+}
+
+pub fn right_button_down(hwnd: isize) {
+	unsafe {
+		// SendMessageW(HWND(hwnd), WM_SETCURSOR, WPARAM(hwnd as usize), lmbd);
+		PostMessageW(HWND(hwnd), WM_RBUTTONDOWN, WPARAM(1), LPARAM(0)).unwrap();
+	}
+}
+
 pub fn input_listen(loop_flag: Arc<AtomicBool>) {
 	let receiver = message_loop::start().unwrap();
 	let mut shift_holder = false;
@@ -114,6 +128,20 @@ pub fn input_listen(loop_flag: Arc<AtomicBool>) {
 				}
 				if vk == Vk::Q && shift_holder {
 					loop_flag.store(false, Ordering::SeqCst);
+				}
+				if vk == Vk::F9 {
+					let win_list = win_screenshot::prelude::window_list().unwrap();
+					let window = win_list.iter().find(
+						|i| i.window_name.contains("Minecraft")
+					).unwrap();
+					left_button_down(window.hwnd);
+				}
+				if vk == Vk::F10 {
+					let win_list = win_screenshot::prelude::window_list().unwrap();
+					let window = win_list.iter().find(
+						|i| i.window_name.contains("Minecraft")
+					).unwrap();
+					right_button_down(window.hwnd);
 				}
 			},
 			message_loop::Event::Keyboard {vk, action: Action::Release, ..} => {
