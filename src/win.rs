@@ -84,6 +84,7 @@ pub fn foreground_window_and_click(hwnd: isize, x: i32, y: i32) {
 	};
 	unsafe {
 		let working_hwnd = GetForegroundWindow();
+		let raw_pos = winput::Mouse::position().unwrap();
 		GetWindowInfo(HWND(hwnd), &mut info).unwrap();
 		SetForegroundWindow(HWND(hwnd));
 
@@ -97,6 +98,7 @@ pub fn foreground_window_and_click(hwnd: isize, x: i32, y: i32) {
 
 		std::thread::sleep(std::time::Duration::from_millis(100));
 		SetForegroundWindow(working_hwnd);
+		winput::Mouse::set_position(raw_pos.0, raw_pos.1).unwrap();
 	}
 }
 
