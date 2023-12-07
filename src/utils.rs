@@ -3,10 +3,6 @@ use chrono::format::strftime::StrftimeItems;
 use serde_derive::Deserialize;
 
 
-pub const WINPAD_X: i32 = 16;
-pub const WINPAD_Y: i32 = 39;
-
-
 #[derive(Deserialize)]
 pub struct ConfigData {
 	pub cfgs: Vec<Config>
@@ -77,4 +73,5 @@ pub fn now_str() -> String {
 	let format_items = StrftimeItems::new("%Y-%m-%d %H:%M:%S");
 	return local_time.format_with_items(format_items).to_string();
 }
+
 

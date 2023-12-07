@@ -89,9 +89,9 @@ fn get_foreground_window_rect(looping: Arc<AtomicBool>) {
 		}
 		unsafe {
 			let h = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
-			let (x, y) = win::get_window_resolution(h.0);
+			let (x, y, a, b) = win::get_window_resolution(h.0);
 			utils::clear_line();
-			print!("Reading Top window resolution: ({} x {}).", x, y);
+			print!("Window Resolution:({}, {}), Paddding:({}, {})", x, y, a, b);
 			std::io::stdout().flush().unwrap();
 		}
 		thread::sleep(std::time::Duration::from_millis(100));
@@ -125,11 +125,8 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: utils::Config) {
 	let img_dict = imgs::read_pic_from_dir(&templates_path);
 	println!("\n{} -- Template images all loaded.", utils::now_str());
 	// 2. Start Matching & Clicking:
-	win::set_window_rect(
-		window.hwnd,
-		cfg.client_width + utils::WINPAD_X,
-		cfg.client_height + utils::WINPAD_Y
-	);
+	win::set_window_rect(window.hwnd, cfg.client_width, cfg.client_height);
+
 	let mut matcher = TemplateMatcher::new();
 	let mut print_dots = utils::looping_print_func();
 	loop {
@@ -163,6 +160,7 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: utils::Config) {
 		thread::sleep(std::time::Duration::from_millis(50));
 	}
 }
+
 
 
 

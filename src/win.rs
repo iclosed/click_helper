@@ -9,28 +9,29 @@ use crossterm::event::*;
 use crossterm::terminal::*;
 
 
-#[allow(dead_code)]
-pub fn get_window_resolution(hwnd: isize) -> (i32, i32) {
+pub fn get_window_resolution(hwnd: isize) -> (i32, i32, i32, i32) {
 	let mut info = WINDOWINFO {
 		cbSize: core::mem::size_of::<WINDOWINFO>() as u32,
 		..Default::default()
 	};
 	unsafe {
 		if let Ok(_) = GetWindowInfo(HWND(hwnd), &mut info) {
-			(
-				info.rcWindow.right - info.rcWindow.left - utils::WINPAD_X,
-				info.rcWindow.bottom - info.rcWindow.top - utils::WINPAD_Y
-			)
+			let win_x = info.rcWindow.right - info.rcWindow.left;
+			let win_y = info.rcWindow.bottom - info.rcWindow.top;
+			let reso_x = info.rcClient.right - info.rcClient.left;
+			let reso_y = info.rcClient.bottom - info.rcClient.top;
+			(reso_x, reso_y, win_x - reso_x, win_y - reso_y)
 		} else {
-			(-1, -1)
+			(-1, -1, 0, 0)
 		}
 	}
 }
 
 pub fn set_window_rect(hwnd: isize, width: i32, height: i32) {
 	unsafe {
+		let (_, _, pad_x, pad_y) = get_window_resolution(hwnd);
 		SetWindowPos(
-			HWND(hwnd), HWND_TOP, 0, 0, width, height,
+			HWND(hwnd), HWND_TOP, 0, 0, width + pad_x, height + pad_y,
 			SWP_DRAWFRAME | SWP_NOMOVE | SWP_NOZORDER
 		).unwrap();
 	}
@@ -171,5 +172,6 @@ pub fn disable_input_when_looping(looping: &Arc<AtomicBool>) {
 	}
 	disable_raw_mode().unwrap(); // 禁用原始模式
 }
+
 
 
