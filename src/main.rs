@@ -142,7 +142,7 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: utils::Config) {
 				MatchTemplateMethod::SumOfSquaredDifferences
 			);
 			let extremes = find_extremes(&matcher.wait_for_result().unwrap());
-			if extremes.min_value < 3.0 {
+			if extremes.min_value < 5.0 {
 				utils::clear_line();
 				println!("{} - ({}) Found! diff({})",
 					utils::now_str(), img_title, extremes.min_value
@@ -150,7 +150,7 @@ fn match_clicks(looping: Arc<AtomicBool>, cfg: utils::Config) {
 				let real_x = extremes.min_value_location.0 + img.width() / 2;
 				let real_y = extremes.min_value_location.1 + img.height() / 2;
 				win::click(window.hwnd, real_x, real_y, !cfg.foreground);
-			} else if extremes.min_value < 8.0 {
+			} else if extremes.min_value < 10.0 {
 				utils::clear_line();
 				println!("{} - ({}) Nearly found. diff({})",
 					utils::now_str(), img_title, extremes.min_value
