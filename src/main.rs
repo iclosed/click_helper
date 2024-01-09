@@ -63,6 +63,16 @@ fn main() {
 			t.join().unwrap();
 			continue;
 		}
+		if let "l" | "lol" = cmd {
+			loop_flag.store(true, Ordering::SeqCst);
+			let test_loop_c = Arc::clone(&loop_flag);
+			let t = thread::spawn(move || {
+				auto_LOL(test_loop_c);
+			});
+			win::disable_input_when_looping(&loop_flag);
+			t.join().unwrap();
+			continue;
+		}
 		if let Some(cfg) = data.cfgs.iter().find(|c| c.cmd == cmd) {
 			println!("({}) Loaded!", &cfg.alias);
 			loop_flag.store(true, Ordering::SeqCst);
@@ -106,10 +116,30 @@ fn test(looping: Arc<AtomicBool>) {
 			break;
 		}
 		print_dots();
-		thread::sleep(std::time::Duration::from_millis(100));
 	}
 	utils::clear_line();
 	println!("Test looping finished!");
+}
+
+fn auto_LOL(looping: Arc<AtomicBool>) {
+	thread::sleep(std::time::Duration::from_millis(3000));
+	loop {
+		if !looping.load(Ordering::SeqCst) {
+			break;
+		}
+		let raw_pos = winput::Mouse::position().unwrap();
+
+		winput::Mouse::set_position(raw_pos.0 - 400, raw_pos.1 + 400).unwrap();
+		winput::send(winput::Button::Right);
+		thread::sleep(std::time::Duration::from_millis(100));
+
+		winput::Mouse::set_position(raw_pos.0, raw_pos.1).unwrap();
+		thread::sleep(std::time::Duration::from_millis(1900));
+
+		winput::send(winput::Button::Right);
+		thread::sleep(std::time::Duration::from_millis(8000));
+	}
+	utils::clear_line();
 }
 
 fn match_clicks(looping: Arc<AtomicBool>, cfg: utils::Config) {
